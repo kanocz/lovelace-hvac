@@ -4,8 +4,9 @@ import {
   css
 } from "https://unpkg.com/lit-element@2.0.1/lit-element.js?module";
 
+console.log(`%chvac-card\n%cVersion: ${'0.1.0'}`, 'color: #1976d2; font-weight: bold;', '');
 
-class ComfoAirCard extends LitElement {
+class HVACCard extends LitElement {
   static get properties() {
     return {
       hass: {},
@@ -20,20 +21,20 @@ class ComfoAirCard extends LitElement {
       <div class="bg">
           <div class="flex-container">
               <div class="flex-col-out">
-                  <div>${this.hass.states['sensor.comfoair_outside_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:speedometer"></ha-icon></ha-icon> ${Math.trunc(this.hass.states['sensor.comfoair_intake_fan_speed_rpm'].state)} rpm</div>
-                  <div>${this.hass.states['sensor.comfoair_exhaust_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:speedometer"></ha-icon> ${Math.trunc(this.hass.states['sensor.comfoair_exhaust_fan_speed_rpm'].state)} rpm</div>
+                  <div>${this.hass.states['sensor.recuperace_outdoor_air_temperature'].state}°C</div>
+                  <div class="fan-state"><ha-icon icon="mdi:speedometer"></ha-icon></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_supply_fan_spreed_rpm'].state)} rpm</div>
+                  <div>${this.hass.states['sensor.recuperace_exhaust_air_temperature'].state}°C</div>
+                  <div class="fan-state"><ha-icon icon="mdi:speedometer"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_extract_fan_spreed_rpm'].state)} rpm</div>
               </div>
               <div class="flex-col-main">
-                  <div>${this.hass.states[this.config.entity].attributes.temperature}°C</div>
-                  <div><ha-icon class="spin" icon="mdi:${({'auto': 'fan', 'off': 'fan-off', low: 'fan-speed-1', medium: 'fan-speed-2', high: 'fan-speed-3'}[this.hass.states[this.config.entity].attributes.fan_mode])}"></ha-icon></div>
+                  <div>${this.hass.states['sensor.recuperace_current_system_state'].state}</div>
+                  <div><ha-icon class="spin" icon="mdi:${({'Standby': 'fan-off', 'Building protection': 'fan-speed-1', 'Economy': 'fan-speed-2', 'Comfort': 'fan-speed-3'}[this.hass.states['select.recuperace_current_system_mode'].state])}"></ha-icon></div>
               </div>
               <div class="flex-col-in">
-                  <div>${this.hass.states['sensor.comfoair_return_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.comfoair_return_air_level'].state)}%</div>
-                  <div>${this.hass.states['sensor.comfoair_supply_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.comfoair_supply_air_level'].state)}%</div>
+                  <div>${this.hass.states['sensor.recuperace_extract_air_temperature'].state}°C</div>
+                  <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_current_extract_air_flow_m3_h'].state)}m³/h</div>
+                  <div>${this.hass.states['sensor.recuperace_supply_air_temperature'].state}°C</div>
+                  <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_current_supply_air_flow_m3_h'].state)}m³/h</div>
               </div>
           </div>
       </div>
@@ -50,7 +51,7 @@ class ComfoAirCard extends LitElement {
   }
 
   getFanTmpl(){
-    if(this.hass.states['binary_sensor.comfoair_supply_fan_active'].state == 'on'){
+    if(this.hass.states['select.recuperace_current_system_mode'].state != 'Standby'){
       return html`<ha-icon icon="mdi:fan"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:fan"></ha-icon>`;
@@ -58,7 +59,7 @@ class ComfoAirCard extends LitElement {
   }
 
   getAirFilterTmpl(){
-    if(this.hass.states['sensor.comfoair_filter_status'].state == 'Full'){
+    if(this.hass.states['sensor.recuperace_filters_timer_days_left'].state < 10){
       return html`<ha-icon class="warning" icon="mdi:air-filter"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:air-filter"></ha-icon>`;
@@ -66,15 +67,15 @@ class ComfoAirCard extends LitElement {
   }
 
   getBypassTmpl(){
-    if(this.hass.states['binary_sensor.comfoair_bypass_valve_open'].state == 'on'){
-      return html`<ha-icon icon="mdi:electric-switch"></ha-icon>`;
+    if(this.hass.states['sensor.recuperace_bypass_position'].state == 100){
+      return html`<ha-icon icon="mdi:shuffle-disabled"></ha-icon>`;
     }else{
-      return html`<ha-icon class="inactive" icon="mdi:electric-switch"></ha-icon>`;
+      return html`<ha-icon class="inactive" icon="mdi:shuffle-variant"></ha-icon>`;
     }
   }
 
   getPreHeatTmpl(){
-    if(this.hass.states['binary_sensor.comfoair_preheating_state'].state == 'on'){
+    if(this.hass.states['sensor.recuperace_preater_control_output'].state > 0){
       return html`<ha-icon icon="mdi:radiator"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:radiator"></ha-icon>`;
@@ -82,7 +83,7 @@ class ComfoAirCard extends LitElement {
   }
 
   getSummerModeTmpl(){
-    if(this.hass.states['binary_sensor.comfoair_summer_mode'].state == 'off'){
+    if(this.hass.states['select.recuperace_winter_summer_mode'].state != 'Summer'){
       return html`<ha-icon icon="mdi:snowflake"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:weather-sunny"></ha-icon>`;
@@ -105,7 +106,7 @@ class ComfoAirCard extends LitElement {
       padding: 10px;
     }
     .bg {
-      background-image: url(/local/lovelace-comfoair/comfoair_heat.png);
+      background-image: url(/local/lovelace-havc/hvac_heat.png);
       height: 200px;
       background-size: contain;
       background-repeat: no-repeat;
@@ -182,4 +183,7 @@ class ComfoAirCard extends LitElement {
     `;
   }
 }
-customElements.define("comfoair-card", ComfoAirCard);
+customElements.define("hvac-card", HVACCard);
+
+const xe=window;
+xe.customCards=xe.customCards||[],xe.customCards.push({type:'hvac-card',name:"HVAC Card",preview:!0,description:"HVAC Card"});
