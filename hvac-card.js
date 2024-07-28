@@ -16,7 +16,7 @@ class HVACCard extends LitElement {
 
   render() {
     return html`
-    <ha-card>
+    <ha-card style="width: 500px">
     <div class="container">
       <div class="bg">
           <div class="flex-container">
