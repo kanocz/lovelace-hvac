@@ -16,7 +16,7 @@ class HVACCard extends LitElement {
 
   render() {
     return html`
-    <ha-card style="width: 500px">
+    <ha-card style="width: 400px">
     <div class="container">
       <div class="bg">
           <div class="flex-container">
@@ -31,9 +31,9 @@ class HVACCard extends LitElement {
                   <div><ha-icon class="spin" icon="mdi:${({'Standby': 'fan-off', 'Building protection': 'fan-speed-1', 'Economy': 'fan-speed-2', 'Comfort': 'fan-speed-3'}[this.hass.states['select.recuperace_current_system_mode'].state])}"></ha-icon></div>
               </div>
               <div class="flex-col-in">
-                  <div>${this.hass.states['sensor.recuperace_extract_air_temperature'].state}°C</div>
+                  <div style="align-self: end">${this.hass.states['sensor.recuperace_extract_air_temperature'].state}°C</div>
                   <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_current_extract_air_flow_m3_h'].state)}m³/h</div>
-                  <div>${this.hass.states['sensor.recuperace_supply_air_temperature'].state}°C</div>
+                  <div style="align-self: end">${this.hass.states['sensor.recuperace_supply_air_temperature'].state}°C</div>
                   <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_current_supply_air_flow_m3_h'].state)}m³/h</div>
               </div>
           </div>
@@ -143,7 +143,7 @@ class HVACCard extends LitElement {
       justify-content: space-between;
     }
     .fan-state {
-      padding-top: 15px;
+      padding-top: 35px;
     }
     .spin {
       animation-name: spin;
