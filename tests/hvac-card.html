@@ -114,8 +114,109 @@
     assert(events.at(-1).detail.entityId === Object.keys(readings)[0], 'Entity must stay correct after update');
     states['sensor.recuperace_supply_fan_spreed_rpm'].state = '3433';
     card.hass = { states };
+
+    const customIds = {
+      outdoor_temperature: 'sensor.other_outdoor',
+      exhaust_temperature: 'sensor.other_exhaust',
+      extract_temperature: 'sensor.other_extract',
+      supply_temperature: 'sensor.other_supply',
+      supply_fan_rpm: 'sensor.other_supply_rpm',
+      extract_fan_rpm: 'sensor.other_extract_rpm',
+      extract_air_flow: 'sensor.other_extract_flow',
+      supply_air_flow: 'sensor.other_supply_flow',
+      system_state: 'sensor.other_state',
+      system_mode: 'select.other_mode',
+      filter_days_left: 'sensor.other_filter',
+      bypass_position: 'sensor.other_bypass',
+      preheater_output: 'sensor.other_preheater',
+      winter_summer_mode: 'select.other_season'
+    };
+    const customValues = {
+      outdoor_temperature: '-3.2', exhaust_temperature: '4.5',
+      extract_temperature: '23.4', supply_temperature: '18.6',
+      supply_fan_rpm: '1200.9', extract_fan_rpm: '1300.1',
+      extract_air_flow: '98.7', supply_air_flow: '123.4',
+      system_state: 'Boost', system_mode: 'Economy', filter_days_left: '3',
+      bypass_position: '100', preheater_output: '35', winter_summer_mode: 'Summer'
+    };
+    const customStates = Object.fromEntries(Object.entries(customIds).map(([key, id]) => [id, {
+      state: customValues[key], attributes: { friendly_name: key }
+    }]));
+    const Card = card.constructor;
+    const form = Card.getConfigForm();
+    assert(form.schema.length === 14, 'Visual editor must expose all 14 entity roles');
+    for (const field of form.schema) {
+      assert(field.name in customIds && field.selector.entity, 'Editor must use entity selectors');
+      assert(form.computeLabel(field) && form.computeHelper(field), 'Every editor field needs a label and default hint');
+    }
+    const defaults = Card.getStubConfig();
+    defaults.system_mode = 'select.changed';
+    assert(Card.getStubConfig().system_mode === 'select.recuperace_current_system_mode', 'Defaults must not be shared mutable config');
+
+    const customConfig = { type: 'custom:hvac-card', ...customIds, grid_options: { columns: 6 } };
+    form.assertConfig(customConfig);
+    card.setConfig(customConfig);
+    card.hass = { states: customStates };
+    await card.updateComplete;
+    assert(card.config.grid_options.columns === 6, 'Dashboard options must survive entity configuration');
+    assert(customConfig.system_mode === customIds.system_mode, 'Input configuration must not be mutated');
+    const readingKeys = ['outdoor_temperature', 'supply_fan_rpm', 'exhaust_temperature', 'extract_fan_rpm', 'extract_temperature', 'extract_air_flow', 'supply_temperature', 'supply_air_flow'];
+    const expectedReadings = ['-3.2°C', '1200 rpm', '4.5°C', '1300 rpm', '23.4°C', '98m³/h', '18.6°C', '123m³/h'];
+    buttons.forEach((button, index) => {
+      assert(button.textContent.includes(expectedReadings[index]), `Custom reading ${index} uses the wrong sensor`);
+      button.click();
+      assert(events.at(-1).detail.entityId === customIds[readingKeys[index]], 'Reading history must use configured entity');
+    });
+    assert(modeButton.textContent.trim() === 'Boost', 'Heading must use the configured reported state');
+    modeButton.click();
+    assert(events.at(-1).detail.entityId === customIds.system_mode, 'Mode click must use configured select');
+    assert(card.shadowRoot.querySelector('.spin').getAttribute('icon') === 'mdi:fan-speed-2', 'Fan speed icon must use configured mode');
+    const indicators = [...card.shadowRoot.querySelectorAll('.info-row ha-icon')];
+    assert(!indicators[0].classList.contains('inactive'), 'Fan indicator must use configured mode');
+    assert(indicators[1].classList.contains('warning'), 'Filter warning must use configured days remaining');
+    assert(indicators[2].getAttribute('icon') === 'mdi:shuffle-disabled', 'Bypass must use configured position');
+    assert(!indicators[3].classList.contains('inactive'), 'Preheater must use configured output');
+    assert(indicators[4].getAttribute('icon') === 'mdi:weather-sunny', 'Season icon must use configured season');
+
+    card.setConfig({ ...customConfig, system_mode: 'input_select.replacement_mode' });
+    card.hass = { states: { 'input_select.replacement_mode': { state: 'Auto', attributes: {} } } };
+    await card.updateComplete;
+    assert(modeButton.textContent.trim() === 'Auto', 'Missing reported state must fall back to selected mode');
+    modeButton.click();
+    assert(events.at(-1).detail.entityId === 'input_select.replacement_mode', 'Changed config must replace the click target');
+    assert(card.shadowRoot.querySelector('.spin').getAttribute('icon') === 'mdi:fan', 'Other mode names need a valid generic icon');
+    buttons.forEach(button => assert(button.disabled && button.getAttribute('aria-label') === `${button.title}: —`, 'Missing sensors must show disabled placeholders'));
+
+    card.hass = { states: {} };
+    await card.updateComplete;
+    assert(modeButton.disabled && modeButton.textContent.trim() === '—', 'Missing mode must be disabled');
+    assert(!card.shadowRoot.querySelector('.spin'), 'Missing mode must not show a running fan');
+    const beforeMissingClick = events.length;
+    [...buttons, modeButton].forEach(button => button.click());
+    assert(events.length === beforeMissingClick, 'Missing entities must not open dialogs');
+    assert([...card.shadowRoot.querySelectorAll('.info-row ha-icon')].every(icon => icon.classList.contains('inactive')), 'Missing status entities must not appear active');
+
+    card.setConfig({ type: 'custom:hvac-card', outdoor_temperature: customIds.outdoor_temperature });
+    card.hass = { states: { ...states, ...customStates } };
+    await card.updateComplete;
+    assert(buttons[0].textContent.includes('-3.2°C') && buttons[1].textContent.includes('3433 rpm'), 'Partial config must retain other defaults');
+    for (const empty of ['', null]) {
+      card.setConfig({ type: 'custom:hvac-card', outdoor_temperature: empty });
+      await card.updateComplete;
+      assert(buttons[0].textContent.includes('-12.5°C'), 'Clearing a field must restore its default');
+    }
+    for (const invalid of [null, [], { system_mode: [] }, { outdoor_temperature: 42 }, { system_mode: 'not_an_entity' }]) {
+      for (const validate of [config => card.setConfig(config), form.assertConfig]) {
+        let rejected = false;
+        try { validate(invalid); } catch (error) { rejected = true; }
+        assert(rejected, 'Malformed config must be rejected by both card and editor');
+      }
+    }
+    card.setConfig({ type: 'custom:hvac-card' });
+    card.hass = { states };
+    await card.updateComplete;
     assert(!performance.getEntriesByType('resource').some(resource => resource.name.includes('hvac_heat.png')), 'Card must not request the old PNG');
-    document.querySelector('#result').textContent = 'PASS: inline SVG, sensor and mode events, live updates, accessible buttons, and layout at 280–800px.\nClick a reading or operating state to inspect its entity below.';
+    document.querySelector('#result').textContent = 'PASS: configurable entities, editor schema, defaults, missing entities, validation, inline SVG, entity events, live updates, and layout at 280–800px.\nClick a reading or operating state to inspect its entity below.';
     document.addEventListener('hass-more-info', event => {
       document.querySelector('#result').textContent = `hass-more-info: ${event.detail.entityId}`;
     });

@@ -6,7 +6,52 @@ import {
 
 console.log(`%chvac-card\n%cVersion: ${'0.1.0'}`, 'color: #1976d2; font-weight: bold;', '');
 
+const ENTITY_FIELDS = {
+  outdoor_temperature: { entity: 'sensor.recuperace_outdoor_air_temperature', label: 'Outdoor air temperature (top left)' },
+  exhaust_temperature: { entity: 'sensor.recuperace_exhaust_air_temperature', label: 'Exhaust air temperature (bottom left)' },
+  extract_temperature: { entity: 'sensor.recuperace_extract_air_temperature', label: 'Extract air temperature (top right)' },
+  supply_temperature: { entity: 'sensor.recuperace_supply_air_temperature', label: 'Supply air temperature (bottom right)' },
+  supply_fan_rpm: { entity: 'sensor.recuperace_supply_fan_spreed_rpm', label: 'Supply fan speed (RPM)' },
+  extract_fan_rpm: { entity: 'sensor.recuperace_extract_fan_spreed_rpm', label: 'Extract fan speed (RPM)' },
+  extract_air_flow: { entity: 'sensor.recuperace_current_extract_air_flow_m3_h', label: 'Extract air flow (top right)' },
+  supply_air_flow: { entity: 'sensor.recuperace_current_supply_air_flow_m3_h', label: 'Supply air flow (bottom right)' },
+  system_state: { entity: 'sensor.recuperace_current_system_state', label: 'Reported operating state (heading)' },
+  system_mode: { entity: 'select.recuperace_current_system_mode', label: 'Operating mode selector (heading click)' },
+  filter_days_left: { entity: 'sensor.recuperace_filters_timer_days_left', label: 'Filter life remaining (days)' },
+  bypass_position: { entity: 'sensor.recuperace_bypass_position', label: 'Bypass position (%)' },
+  preheater_output: { entity: 'sensor.recuperace_preater_control_output', label: 'Preheater output' },
+  winter_summer_mode: { entity: 'select.recuperace_winter_summer_mode', label: 'Winter / summer mode' }
+};
+
 class HVACCard extends LitElement {
+  static getConfigForm() {
+    return {
+      schema: Object.entries(ENTITY_FIELDS).map(([name, field]) => ({
+        name,
+        selector: { entity: { filter: { domain: field.entity.startsWith('select.') ? ['select', 'input_select'] : 'sensor' } } }
+      })),
+      computeLabel: (schema) => ENTITY_FIELDS[schema.name]?.label,
+      computeHelper: (schema) => `Default: ${ENTITY_FIELDS[schema.name].entity}`,
+      assertConfig: HVACCard.validateConfig
+    };
+  }
+
+  static getStubConfig() {
+    return Object.fromEntries(Object.entries(ENTITY_FIELDS).map(([key, field]) => [key, field.entity]));
+  }
+
+  static validateConfig(config) {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      throw new Error('Card configuration must be an object.');
+    }
+    for (const key of Object.keys(ENTITY_FIELDS)) {
+      const entityId = config[key];
+      if (entityId != null && entityId !== '' && (typeof entityId !== 'string' || !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(entityId))) {
+        throw new Error(`${key} must be an entity ID such as ${ENTITY_FIELDS[key].entity}.`);
+      }
+    }
+  }
+
   static get properties() {
     return {
       hass: {},
@@ -15,6 +60,8 @@ class HVACCard extends LitElement {
   }
 
   render() {
+    if (!this.hass || !this.config) return html``;
+    const mode = this.getState('system_mode');
     return html`
     <ha-card>
     <div class="container">
@@ -39,23 +86,24 @@ class HVACCard extends LitElement {
           </svg>
           <div class="flex-container">
               <div class="flex-col-out">
-                  ${this.getReadingTmpl('sensor.recuperace_outdoor_air_temperature', '°C')}
-                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_supply_fan_spreed_rpm', ' rpm', 'mdi:speedometer')}</div>
-                  ${this.getReadingTmpl('sensor.recuperace_exhaust_air_temperature', '°C')}
-                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_extract_fan_spreed_rpm', ' rpm', 'mdi:speedometer')}</div>
+                  ${this.getReadingTmpl('outdoor_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('supply_fan_rpm', ' rpm', 'mdi:speedometer')}</div>
+                  ${this.getReadingTmpl('exhaust_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('extract_fan_rpm', ' rpm', 'mdi:speedometer')}</div>
               </div>
               <div class="flex-col-main">
                   <button type="button" class="reading mode-state" aria-haspopup="dialog"
-                    @click=${() => this.showMoreInfo('select.recuperace_current_system_mode')}>
-                    ${this.hass.states['sensor.recuperace_current_system_state'].state}
+                    ?disabled=${!this.hass.states[this.getEntityId('system_mode')]}
+                    @click=${() => this.showMoreInfo(this.getEntityId('system_mode'))}>
+                    ${this.getState('system_state') ?? mode ?? '—'}
                   </button>
-                  <div><ha-icon class="spin" icon="mdi:${({'Standby': 'fan-off', 'Building protection': 'fan-speed-1', 'Economy': 'fan-speed-2', 'Comfort': 'fan-speed-3'}[this.hass.states['select.recuperace_current_system_mode'].state])}"></ha-icon></div>
+                  <div><ha-icon class="${mode && mode !== 'Standby' ? 'spin' : 'inactive'}" icon="mdi:${({'Standby': 'fan-off', 'Building protection': 'fan-speed-1', 'Economy': 'fan-speed-2', 'Comfort': 'fan-speed-3'}[mode]) || 'fan'}"></ha-icon></div>
               </div>
               <div class="flex-col-in">
-                  ${this.getReadingTmpl('sensor.recuperace_extract_air_temperature', '°C')}
-                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_current_extract_air_flow_m3_h', 'm³/h', 'mdi:fan')}</div>
-                  ${this.getReadingTmpl('sensor.recuperace_supply_air_temperature', '°C')}
-                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_current_supply_air_flow_m3_h', 'm³/h', 'mdi:fan')}</div>
+                  ${this.getReadingTmpl('extract_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('extract_air_flow', 'm³/h', 'mdi:fan')}</div>
+                  ${this.getReadingTmpl('supply_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('supply_air_flow', 'm³/h', 'mdi:fan')}</div>
               </div>
           </div>
       </div>
@@ -71,12 +119,25 @@ class HVACCard extends LitElement {
     `;
   }
 
-  getReadingTmpl(entityId, unit, icon) {
+  getEntityId(key) {
+    return this.config[key] || ENTITY_FIELDS[key].entity;
+  }
+
+  getState(key) {
+    const state = this.hass.states[this.getEntityId(key)]?.state;
+    return state === 'unknown' || state === 'unavailable' ? undefined : state;
+  }
+
+  getReadingTmpl(key, unit, icon) {
+    const entityId = this.getEntityId(key);
     const entity = this.hass.states[entityId];
-    const value = icon && Number.isFinite(Number(entity.state)) ? Math.trunc(entity.state) : entity.state;
-    const name = entity.attributes.friendly_name || entityId;
+    const state = entity?.state ?? '—';
+    const value = icon && Number.isFinite(Number(state)) ? Math.trunc(state) : state;
+    const name = entity?.attributes?.friendly_name || entityId;
+    if (!entity) unit = '';
     return html`
       <button type="button" class="reading" title="${name}" aria-label="${name}: ${value}${unit}"
+        ?disabled=${!entity}
         @click=${() => this.showMoreInfo(entityId)}>
         ${icon ? html`<ha-icon icon="${icon}"></ha-icon>` : ''}${value}${unit}
       </button>
@@ -84,6 +145,7 @@ class HVACCard extends LitElement {
   }
 
   showMoreInfo(entityId) {
+    if (!this.hass.states[entityId]) return;
     this.dispatchEvent(new CustomEvent('hass-more-info', {
       detail: { entityId },
       bubbles: true,
@@ -92,7 +154,8 @@ class HVACCard extends LitElement {
   }
 
   getFanTmpl(){
-    if(this.hass.states['select.recuperace_current_system_mode'].state != 'Standby'){
+    const mode = this.getState('system_mode');
+    if(mode && mode != 'Standby'){
       return html`<ha-icon icon="mdi:fan"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:fan"></ha-icon>`;
@@ -100,7 +163,7 @@ class HVACCard extends LitElement {
   }
 
   getAirFilterTmpl(){
-    if(this.hass.states['sensor.recuperace_filters_timer_days_left'].state < 10){
+    if(this.getState('filter_days_left') < 10){
       return html`<ha-icon class="warning" icon="mdi:air-filter"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:air-filter"></ha-icon>`;
@@ -108,7 +171,7 @@ class HVACCard extends LitElement {
   }
 
   getBypassTmpl(){
-    if(this.hass.states['sensor.recuperace_bypass_position'].state == 100){
+    if(this.getState('bypass_position') == 100){
       return html`<ha-icon icon="mdi:shuffle-disabled"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:shuffle-variant"></ha-icon>`;
@@ -116,7 +179,7 @@ class HVACCard extends LitElement {
   }
 
   getPreHeatTmpl(){
-    if(this.hass.states['sensor.recuperace_preater_control_output'].state > 0){
+    if(this.getState('preheater_output') > 0){
       return html`<ha-icon icon="mdi:radiator"></ha-icon>`;
     }else{
       return html`<ha-icon class="inactive" icon="mdi:radiator"></ha-icon>`;
@@ -124,15 +187,17 @@ class HVACCard extends LitElement {
   }
 
   getSummerModeTmpl(){
-    if(this.hass.states['select.recuperace_winter_summer_mode'].state != 'Summer'){
+    const mode = this.getState('winter_summer_mode');
+    if(mode && mode != 'Summer'){
       return html`<ha-icon icon="mdi:snowflake"></ha-icon>`;
     }else{
-      return html`<ha-icon class="inactive" icon="mdi:weather-sunny"></ha-icon>`;
+      return html`<ha-icon class="inactive" icon="${mode === 'Summer' ? 'mdi:weather-sunny' : 'mdi:snowflake'}"></ha-icon>`;
     }
   }
 
   setConfig(config) {
-    this.config = config;
+    HVACCard.validateConfig(config);
+    this.config = { ...config };
   }
 
   // The height of your card. Home Assistant uses this to automatically
@@ -218,7 +283,10 @@ class HVACCard extends LitElement {
       white-space: nowrap;
       cursor: pointer;
     }
-    .reading:hover {
+    .reading:disabled {
+      cursor: default;
+    }
+    .reading:hover:not(:disabled) {
       background: rgba(127, 127, 127, 0.15);
     }
     .reading:focus-visible {
@@ -268,7 +336,7 @@ class HVACCard extends LitElement {
     }
 
     .warning {
-      color: color: #d80707db;
+      color: #d80707db;
     }
 
   @keyframes spin {
