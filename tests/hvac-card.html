@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HVAC card browser checks</title>
+<style>
+  body { background: #111; color: #ddd; font: 14px Arial, sans-serif; margin: 16px; }
+  #fixture { display: block; width: 320px; max-width: 100%; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+<div id="fixture"></div>
+<pre id="result">Running…</pre>
+<script type="module">
+  import '../hvac-card.js';
+
+  // Stand-ins keep Home Assistant's card and icon geometry for standalone checks.
+  customElements.define('ha-card', class extends HTMLElement {
+    connectedCallback() {
+      this.style.cssText = 'display:block;background:#1c1c1c;border:1px solid #333;border-radius:12px';
+    }
+  });
+  customElements.define('ha-icon', class extends HTMLElement {
+    connectedCallback() {
+      this.style.cssText = 'display:inline-block;width:24px;height:24px;font-size:24px;line-height:24px;text-align:center';
+      this.textContent = this.getAttribute('icon').includes('speedometer') ? '◴' : '✣';
+    }
+  });
+
+  const readings = {
+    'sensor.recuperace_outdoor_air_temperature': '7.1',
+    'sensor.recuperace_supply_fan_spreed_rpm': '3433.9',
+    'sensor.recuperace_exhaust_air_temperature': '0.0',
+    'sensor.recuperace_extract_fan_spreed_rpm': '3353',
+    'sensor.recuperace_extract_air_temperature': '21.9',
+    'sensor.recuperace_current_extract_air_flow_m3_h': '208.9',
+    'sensor.recuperace_supply_air_temperature': '21.0',
+    'sensor.recuperace_current_supply_air_flow_m3_h': '160'
+  };
+  const states = Object.fromEntries(Object.entries({
+    ...readings,
+    'sensor.recuperace_current_system_state': 'Comfort',
+    'select.recuperace_current_system_mode': 'Comfort',
+    'sensor.recuperace_filters_timer_days_left': '30',
+    'sensor.recuperace_bypass_position': '0',
+    'sensor.recuperace_preater_control_output': '0',
+    'select.recuperace_winter_summer_mode': 'Winter'
+  }).map(([entityId, state]) => [entityId, { state, attributes: { friendly_name: entityId } }]));
+  const fixture = document.querySelector('#fixture');
+  const card = document.createElement('hvac-card');
+  card.setConfig({ type: 'custom:hvac-card' });
+  card.hass = { states };
+  fixture.attachShadow({ mode: 'open' }).append(card);
+  const events = [];
+  document.addEventListener('hass-more-info', event => events.push(event));
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+
+  try {
+    await card.updateComplete;
+    const diagram = card.shadowRoot.querySelector('svg.airflow-diagram');
+    assert(diagram && diagram.querySelectorAll('path').length === 6, 'Airflow diagram must render inline');
+    assert(getComputedStyle(card.shadowRoot.querySelector('.bg')).backgroundImage === 'none', 'Diagram must not depend on an external background image');
+    const buttons = [...card.shadowRoot.querySelectorAll('button')];
+    assert(buttons.length === 8, 'All eight readings must be buttons');
+    buttons.forEach((button, index) => {
+      button.click();
+      assert(events.length === index + 1, 'Click must reach the document exactly once');
+      const event = events[index];
+      assert(event.detail.entityId === Object.keys(readings)[index], 'Wrong entity for reading');
+      assert(event.bubbles && event.composed, 'Event must cross Home Assistant shadow roots');
+      assert(button.getAttribute('aria-label').includes(button.title), 'Reading needs an accessible name');
+    });
+    assert(buttons[1].textContent.includes('3433 rpm'), 'RPM should remain truncated');
+    assert(buttons[5].textContent.includes('208m³/h'), 'Air flow should remain truncated');
+
+    for (const mode of ['Comfort', 'Building protection']) {
+      states['sensor.recuperace_current_system_state'] = { state: mode };
+      card.hass = { states };
+      await card.updateComplete;
+      for (const width of [280, 320, 360, 375, 400, 600, 800]) {
+        fixture.style.maxWidth = 'none';
+        fixture.style.width = `${width}px`;
+        await new Promise(requestAnimationFrame);
+        const bounds = card.getBoundingClientRect();
+        const diagramBounds = diagram.getBoundingClientRect();
+        assert(diagramBounds.width > 0 && diagramBounds.height > 0, 'Diagram must be visible');
+        assert(diagramBounds.left >= bounds.left && diagramBounds.right <= bounds.right, `Diagram overflows at ${width}px`);
+        const nodes = [...buttons, card.shadowRoot.querySelector('.mode-state')];
+        const rects = nodes.map(node => node.getBoundingClientRect());
+        assert(card.shadowRoot.querySelector('ha-card').offsetWidth <= width, `Card overflows at ${width}px`);
+        rects.forEach((rect, index) => {
+          assert(rect.left >= bounds.left && rect.right <= bounds.right, `Reading ${index} overflows at ${width}px`);
+          if (index < 8) assert(rect.height >= 44, 'Touch targets must be at least 44px tall');
+          rects.slice(index + 1).forEach(other => {
+            const overlaps = rect.left < other.right && rect.right > other.left && rect.top < other.bottom && rect.bottom > other.top;
+            assert(!overlaps, `Readings overlap at ${width}px (${mode})`);
+          });
+        });
+      }
+    }
+    states['sensor.recuperace_outdoor_air_temperature'].state = '-12.5';
+    states['sensor.recuperace_supply_fan_spreed_rpm'].state = 'unavailable';
+    states['sensor.recuperace_current_system_state'].state = 'Comfort';
+    card.hass = { states };
+    await card.updateComplete;
+    assert(buttons[0].textContent.includes('-12.5°C'), 'Live temperatures must update');
+    assert(buttons[1].textContent.includes('unavailable'), 'Unavailable RPM must not become NaN');
+    buttons[0].click();
+    assert(events.at(-1).detail.entityId === Object.keys(readings)[0], 'Entity must stay correct after update');
+    states['sensor.recuperace_supply_fan_spreed_rpm'].state = '3433';
+    card.hass = { states };
+    assert(!performance.getEntriesByType('resource').some(resource => resource.name.includes('hvac_heat.png')), 'Card must not request the old PNG');
+    document.querySelector('#result').textContent = 'PASS: inline SVG, entity events, live updates, accessible buttons, and layout at 280–800px.\nClick a reading to inspect its entity below.';
+    document.addEventListener('hass-more-info', event => {
+      document.querySelector('#result').textContent = `hass-more-info: ${event.detail.entityId}`;
+    });
+  } catch (error) {
+    document.querySelector('#result').textContent = `FAIL: ${error.message}`;
+    throw error;
+  } finally {
+    fixture.style.width = '320px';
+    fixture.style.maxWidth = '100%';
+  }
+</script>

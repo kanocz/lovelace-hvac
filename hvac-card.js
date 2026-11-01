@@ -16,25 +16,43 @@ class HVACCard extends LitElement {
 
   render() {
     return html`
-    <ha-card style="width: 400px">
+    <ha-card>
     <div class="container">
       <div class="bg">
+          <svg class="airflow-diagram" viewBox="0 0 840 268" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient id="air-temperature">
+                <stop offset="0" stop-color="#adc6eb"></stop>
+                <stop offset="1" stop-color="#ff797d"></stop>
+              </linearGradient>
+            </defs>
+            <g fill="url(#air-temperature)" stroke="#424242" stroke-width="2">
+              <path d="M1 4H169L679 206H839V266H669L158 63H1Z"></path>
+              <path d="M1 206H158L669 4H839V63H679L169 266H1Z"></path>
+            </g>
+            <g fill="#fff">
+              <path d="M23 26H61V17L76 34 61 51V42H23Z"></path>
+              <path d="M803 26H765V17L750 34 765 51V42H803Z"></path>
+              <path d="M76 220H38V211L23 228 38 245V236H76Z"></path>
+              <path d="M750 220H788V211L803 228 788 245V236H750Z"></path>
+            </g>
+          </svg>
           <div class="flex-container">
               <div class="flex-col-out">
-                  <div>${this.hass.states['sensor.recuperace_outdoor_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:speedometer"></ha-icon></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_supply_fan_spreed_rpm'].state)} rpm</div>
-                  <div>${this.hass.states['sensor.recuperace_exhaust_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:speedometer"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_extract_fan_spreed_rpm'].state)} rpm</div>
+                  ${this.getReadingTmpl('sensor.recuperace_outdoor_air_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_supply_fan_spreed_rpm', ' rpm', 'mdi:speedometer')}</div>
+                  ${this.getReadingTmpl('sensor.recuperace_exhaust_air_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_extract_fan_spreed_rpm', ' rpm', 'mdi:speedometer')}</div>
               </div>
               <div class="flex-col-main">
-                  <div>${this.hass.states['sensor.recuperace_current_system_state'].state}</div>
+                  <div class="mode-state">${this.hass.states['sensor.recuperace_current_system_state'].state}</div>
                   <div><ha-icon class="spin" icon="mdi:${({'Standby': 'fan-off', 'Building protection': 'fan-speed-1', 'Economy': 'fan-speed-2', 'Comfort': 'fan-speed-3'}[this.hass.states['select.recuperace_current_system_mode'].state])}"></ha-icon></div>
               </div>
               <div class="flex-col-in">
-                  <div style="align-self: end">${this.hass.states['sensor.recuperace_extract_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_current_extract_air_flow_m3_h'].state)}m³/h</div>
-                  <div style="align-self: end">${this.hass.states['sensor.recuperace_supply_air_temperature'].state}°C</div>
-                  <div class="fan-state"><ha-icon icon="mdi:fan"></ha-icon> ${Math.trunc(this.hass.states['sensor.recuperace_current_supply_air_flow_m3_h'].state)}m³/h</div>
+                  ${this.getReadingTmpl('sensor.recuperace_extract_air_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_current_extract_air_flow_m3_h', 'm³/h', 'mdi:fan')}</div>
+                  ${this.getReadingTmpl('sensor.recuperace_supply_air_temperature', '°C')}
+                  <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_current_supply_air_flow_m3_h', 'm³/h', 'mdi:fan')}</div>
               </div>
           </div>
       </div>
@@ -47,6 +65,22 @@ class HVACCard extends LitElement {
       ${this.getSummerModeTmpl()}
       </div>
     </ha-card>
+    `;
+  }
+
+  getReadingTmpl(entityId, unit, icon) {
+    const entity = this.hass.states[entityId];
+    const value = icon && Number.isFinite(Number(entity.state)) ? Math.trunc(entity.state) : entity.state;
+    const name = entity.attributes.friendly_name || entityId;
+    return html`
+      <button type="button" class="reading" title="${name}" aria-label="${name}: ${value}${unit}"
+        @click=${() => this.dispatchEvent(new CustomEvent('hass-more-info', {
+          detail: { entityId },
+          bubbles: true,
+          composed: true
+        }))}>
+        ${icon ? html`<ha-icon icon="${icon}"></ha-icon>` : ''}${value}${unit}
+      </button>
     `;
   }
 
@@ -102,15 +136,30 @@ class HVACCard extends LitElement {
 
   static get styles() {
     return css`
+    :host {
+      display: block;
+      min-width: 0;
+    }
+    ha-card {
+      width: 100%;
+      box-sizing: border-box;
+      container-type: inline-size;
+    }
     .container {
       padding: 10px;
     }
     .bg {
-      background-image: url(/local/lovelace-havc/hvac_heat.png);
-      height: 200px;
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position-y: center
+      position: relative;
+      height: 224px;
+    }
+    .airflow-diagram {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 120px;
+      transform: translateY(-50%);
+      pointer-events: none;
     }
     .not-found {
     background-color: yellow;
@@ -119,31 +168,71 @@ class HVACCard extends LitElement {
     padding: 8px;
     }
     .flex-container {
+        position: relative;
         display: flex;
         justify-content: space-between;
         height: 100%;
     }
     .flex-col-main {
+      position: absolute;
+      inset: 30px 0;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 30px 0px;
+      align-items: center;
+      pointer-events: none;
       font-size: x-large;
       text-align: center;
       font-weight:bold;
     }
-    .flex-col-out {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+    .mode-state {
+      max-width: 45%;
+      overflow-wrap: anywhere;
+    }
+    .flex-col-out, .flex-col-in {
+      display: grid;
+      grid-template-rows: repeat(2, 44px 1fr);
+      justify-items: start;
+      min-width: 0;
     }
     .flex-col-in {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      justify-items: end;
     }
     .fan-state {
-      padding-top: 35px;
+      align-self: end;
+    }
+    .reading {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: 4px;
+      background: none;
+      color: inherit;
+      font: inherit;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .reading:hover {
+      background: rgba(127, 127, 127, 0.15);
+    }
+    .reading:focus-visible {
+      outline: 2px solid var(--primary-color, #03a9f4);
+      outline-offset: 2px;
+    }
+    @container (max-width: 360px) {
+      .container {
+        padding-top: 50px;
+      }
+      .flex-col-main {
+        top: -40px;
+      }
+      .mode-state {
+        max-width: 100%;
+        font-size: 20px;
+      }
     }
     .spin {
       animation-name: spin;
