@@ -59,7 +59,7 @@
     const diagram = card.shadowRoot.querySelector('svg.airflow-diagram');
     assert(diagram && diagram.querySelectorAll('path').length === 6, 'Airflow diagram must render inline');
     assert(getComputedStyle(card.shadowRoot.querySelector('.bg')).backgroundImage === 'none', 'Diagram must not depend on an external background image');
-    const buttons = [...card.shadowRoot.querySelectorAll('button')];
+    const buttons = [...card.shadowRoot.querySelectorAll('button.reading:not(.mode-state)')];
     assert(buttons.length === 8, 'All eight readings must be buttons');
     buttons.forEach((button, index) => {
       button.click();
@@ -71,11 +71,17 @@
     });
     assert(buttons[1].textContent.includes('3433 rpm'), 'RPM should remain truncated');
     assert(buttons[5].textContent.includes('208m³/h'), 'Air flow should remain truncated');
+    const modeButton = card.shadowRoot.querySelector('button.mode-state');
+    assert(modeButton && modeButton.getAttribute('aria-haspopup') === 'dialog', 'Mode must be a dialog button');
+    modeButton.click();
+    assert(events.length === 9, 'Mode click must reach the document exactly once');
+    assert(events.at(-1).detail.entityId === 'select.recuperace_current_system_mode', 'Mode must open the select, not the system state sensor');
 
     for (const mode of ['Comfort', 'Building protection']) {
       states['sensor.recuperace_current_system_state'] = { state: mode };
       card.hass = { states };
       await card.updateComplete;
+      assert(modeButton.textContent.trim() === mode, 'Reported operating state must still update');
       for (const width of [280, 320, 360, 375, 400, 600, 800]) {
         fixture.style.maxWidth = 'none';
         fixture.style.width = `${width}px`;
@@ -84,12 +90,12 @@
         const diagramBounds = diagram.getBoundingClientRect();
         assert(diagramBounds.width > 0 && diagramBounds.height > 0, 'Diagram must be visible');
         assert(diagramBounds.left >= bounds.left && diagramBounds.right <= bounds.right, `Diagram overflows at ${width}px`);
-        const nodes = [...buttons, card.shadowRoot.querySelector('.mode-state')];
+        const nodes = [...buttons, modeButton];
         const rects = nodes.map(node => node.getBoundingClientRect());
         assert(card.shadowRoot.querySelector('ha-card').offsetWidth <= width, `Card overflows at ${width}px`);
         rects.forEach((rect, index) => {
           assert(rect.left >= bounds.left && rect.right <= bounds.right, `Reading ${index} overflows at ${width}px`);
-          if (index < 8) assert(rect.height >= 44, 'Touch targets must be at least 44px tall');
+          assert(rect.height >= 44, 'Touch targets must be at least 44px tall');
           rects.slice(index + 1).forEach(other => {
             const overlaps = rect.left < other.right && rect.right > other.left && rect.top < other.bottom && rect.bottom > other.top;
             assert(!overlaps, `Readings overlap at ${width}px (${mode})`);
@@ -109,7 +115,7 @@
     states['sensor.recuperace_supply_fan_spreed_rpm'].state = '3433';
     card.hass = { states };
     assert(!performance.getEntriesByType('resource').some(resource => resource.name.includes('hvac_heat.png')), 'Card must not request the old PNG');
-    document.querySelector('#result').textContent = 'PASS: inline SVG, entity events, live updates, accessible buttons, and layout at 280–800px.\nClick a reading to inspect its entity below.';
+    document.querySelector('#result').textContent = 'PASS: inline SVG, sensor and mode events, live updates, accessible buttons, and layout at 280–800px.\nClick a reading or operating state to inspect its entity below.';
     document.addEventListener('hass-more-info', event => {
       document.querySelector('#result').textContent = `hass-more-info: ${event.detail.entityId}`;
     });

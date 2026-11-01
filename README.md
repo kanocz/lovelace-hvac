@@ -26,7 +26,9 @@ The diagram is an inline SVG: it stays sharp as the card resizes and does not
 need a separate image file or depend on the installation directory name.
 Click or tap any temperature, fan RPM, or airflow reading to open that sensor's
 standard Home Assistant more-info dialog, including its history when recorded.
-The readings also support Tab, Enter, and Space.
+Click or tap the operating state (for example, **Comfort**) to open the standard
+dialog for `select.recuperace_current_system_mode` and choose another mode.
+Both the readings and operating state support Tab, Enter, and Space.
 
 After updating, refresh the browser or Companion App frontend cache to load the
 new JavaScript. No card configuration changes are needed.

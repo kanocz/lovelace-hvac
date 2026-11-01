@@ -45,7 +45,10 @@ class HVACCard extends LitElement {
                   <div class="fan-state">${this.getReadingTmpl('sensor.recuperace_extract_fan_spreed_rpm', ' rpm', 'mdi:speedometer')}</div>
               </div>
               <div class="flex-col-main">
-                  <div class="mode-state">${this.hass.states['sensor.recuperace_current_system_state'].state}</div>
+                  <button type="button" class="reading mode-state" aria-haspopup="dialog"
+                    @click=${() => this.showMoreInfo('select.recuperace_current_system_mode')}>
+                    ${this.hass.states['sensor.recuperace_current_system_state'].state}
+                  </button>
                   <div><ha-icon class="spin" icon="mdi:${({'Standby': 'fan-off', 'Building protection': 'fan-speed-1', 'Economy': 'fan-speed-2', 'Comfort': 'fan-speed-3'}[this.hass.states['select.recuperace_current_system_mode'].state])}"></ha-icon></div>
               </div>
               <div class="flex-col-in">
@@ -74,14 +77,18 @@ class HVACCard extends LitElement {
     const name = entity.attributes.friendly_name || entityId;
     return html`
       <button type="button" class="reading" title="${name}" aria-label="${name}: ${value}${unit}"
-        @click=${() => this.dispatchEvent(new CustomEvent('hass-more-info', {
-          detail: { entityId },
-          bubbles: true,
-          composed: true
-        }))}>
+        @click=${() => this.showMoreInfo(entityId)}>
         ${icon ? html`<ha-icon icon="${icon}"></ha-icon>` : ''}${value}${unit}
       </button>
     `;
+  }
+
+  showMoreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent('hass-more-info', {
+      detail: { entityId },
+      bubbles: true,
+      composed: true
+    }));
   }
 
   getFanTmpl(){
@@ -185,10 +192,6 @@ class HVACCard extends LitElement {
       text-align: center;
       font-weight:bold;
     }
-    .mode-state {
-      max-width: 45%;
-      overflow-wrap: anywhere;
-    }
     .flex-col-out, .flex-col-in {
       display: grid;
       grid-template-rows: repeat(2, 44px 1fr);
@@ -222,12 +225,19 @@ class HVACCard extends LitElement {
       outline: 2px solid var(--primary-color, #03a9f4);
       outline-offset: 2px;
     }
+    .mode-state {
+      max-width: 45%;
+      overflow-wrap: anywhere;
+      white-space: normal;
+      text-align: center;
+      pointer-events: auto;
+    }
     @container (max-width: 360px) {
       .container {
-        padding-top: 50px;
+        padding-top: 54px;
       }
       .flex-col-main {
-        top: -40px;
+        top: -44px;
       }
       .mode-state {
         max-width: 100%;
